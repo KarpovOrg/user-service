@@ -39,6 +39,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: test                          # запускается только если тесты прошли
 
+    # ОБЯЗАТЕЛЬНО: без этого GITHUB_TOKEN не может пушить пакеты в организацию
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
