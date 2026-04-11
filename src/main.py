@@ -14,7 +14,7 @@ from core.lifespan import lifespan
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title=settings.app.service_name,
+        title=settings.app.app_name,
         lifespan=lifespan
     )
     app.include_router(api_router, prefix=settings.api.prefix)
