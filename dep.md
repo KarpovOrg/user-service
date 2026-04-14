@@ -775,3 +775,293 @@ IMAGE_NAME=ghcr.io/karpovorg/user-service IMAGE_TAG=latest \
 
 **Добавление нового сервиса** — повторяете те же шаги для нового репозитория. Org-секреты (`SSH_PRIVATE_KEY`, `VPS_HOST`, `VPS_USER`, `GHCR_TOKEN`, `GHCR_USER`) добавляются **один раз** и наследуются всеми репозиториями организации. Для нового сервиса добавляете только `SERVICE_DIR`.
 
+---
+
+## 🗄️ Подключение PostgreSQL (users_schema + users)
+
+> Выполняйте команды через **веб-консоль TimeWeb** или SSH.
+
+### Что произошло в коде
+
+| Файл | Что добавлено |
+|------|--------------|
+| `src/migrations/env.py` | Async Alembic env — читает `settings.db.url` |
+| `src/migrations/versions/0001_create_users.py` | Создаёт схему `users_schema` и таблицу `users` |
+| `alembic.ini` | `script_location = src/migrations` |
+| `docker-compose.prod.yml` | Сервис `migrate` + сеть `internal` |
+| `.github/workflows/deploy.yml` | Шаг `docker compose run --rm migrate` перед рестартом |
+
+---
+
+### Шаг 1 — Обновить `.env.prod` на сервере
+
+```bash
+nano /opt/microservices/user-service/.env.prod
+```
+
+Добавьте эти строки (пароль уже ваш из инфраструктуры):
+
+```env
+USER_CONFIG__APP__APP_NAME=user-service
+USER_CONFIG__APP__DEBUG=false
+
+# PostgreSQL — hostname "postgres" — это имя контейнера в сети internal
+USER_CONFIG__DB__URL=postgresql+asyncpg://postgres:faUtUONuz5SJBlAQmXSH@postgres:5432/mydb
+USER_CONFIG__DB__ECHO=false
+```
+
+Сохранить: `Ctrl+O` → `Enter` → `Ctrl+X`
+
+> ⚠️ Hostname `postgres` — именно так называется контейнер PostgreSQL в сети `internal`.  
+> Порт `5432`. База — `mydb` (ваша существующая база из инфраструктуры).
+
+---
+
+### Шаг 2 — Запустить деплой
+
+Просто запушьте код в `main` — CI/CD сделает всё автоматически:
+
+```powershell
+git add .
+git commit -m "Add database: users_schema migration"
+git push origin main
+```
+
+**Что произойдёт в GitHub Actions:**
+```
+✅ test    → pytest (SQLite in-memory, без реального PostgreSQL)
+✅ build   → docker build + push в ghcr.io
+✅ deploy  →
+           1. docker compose pull user-service      (скачивает новый образ)
+           2. docker compose run --rm migrate       (запускает миграции)
+              → CREATE SCHEMA users_schema
+              → CREATE TABLE users_schema.users
+              → CREATE INDEX ix_users_id
+              → CREATE INDEX ix_users_uid
+           3. docker compose up -d user-service     (перезапускает приложение)
+```
+
+---
+
+### Шаг 3 — Проверить на сервере
+
+После успешного деплоя:
+
+```bash
+# 1. Проверить что таблица создалась
+docker exec -it postgres psql -U postgres -d mydb -c "\dn"
+# Должна появиться: users_schema
+
+docker exec -it postgres psql -U postgres -d mydb -c "\dt users_schema.*"
+# Должна появиться: users_schema | users | table
+
+# 2. Проверить логи миграций
+docker logs user-service-migrate 2>&1 | tail -20
+# Ожидаемый вывод:
+# INFO  [alembic.runtime.migration] Running upgrade  -> 0001, create users_schema and users table
+
+# 3. Проверить логи приложения
+docker logs user-service --tail=20
+# Ожидаемый вывод:
+# ✅ Подключение к БД установлено
+
+# 4. Проверить health-check
+curl http://localhost:8000/api/v1/health/
+# {"service":"user-service","status":"ok"}
+```
+
+---
+
+### Если нужно запустить миграции вручную (без пуша)
+
+Если вы уже задеплоили образ и просто хотите применить миграции:
+
+```bash
+cd /opt/microservices/user-service
+
+# Применить все миграции
+IMAGE_NAME=ghcr.io/karpovorg/user-service \
+IMAGE_TAG=latest \
+  docker compose -f docker-compose.prod.yml run --rm migrate
+
+# Посмотреть текущее состояние миграций
+IMAGE_NAME=ghcr.io/karpovorg/user-service \
+IMAGE_TAG=latest \
+  docker compose -f docker-compose.prod.yml run --rm migrate \
+  python -m alembic current
+
+# Откатить последнюю миграцию
+IMAGE_NAME=ghcr.io/karpovorg/user-service \
+IMAGE_TAG=latest \
+  docker compose -f docker-compose.prod.yml run --rm migrate \
+  python -m alembic downgrade -1
+```
+
+---
+
+### Как добавить следующую миграцию
+
+Когда нужно изменить схему БД (добавить колонку, таблицу и т.д.):
+
+**1. Создайте файл миграции** в `src/migrations/versions/`:
+
+```
+src/migrations/versions/0002_add_email_to_users.py
+```
+
+```python
+revision: str = "0002"
+down_revision: str = "0001"   # ← ссылка на предыдущую миграцию
+
+def upgrade() -> None:
+    op.add_column(
+        "users",
+        sa.Column("email", sa.String(255), nullable=True),
+        schema="users_schema",
+    )
+
+def downgrade() -> None:
+    op.drop_column("users", "email", schema="users_schema")
+```
+
+**2. Пушьте** — CI/CD автоматически применит новую миграцию.
+
+> 💡 **Правило цепочки:** каждая миграция ссылается на предыдущую через `down_revision`.  
+> Alembic применяет их строго по порядку: `0001` → `0002` → `0003` → ...
+
+---
+
+### Структура файлов Alembic
+
+```
+user-service/
+├── alembic.ini                          ← конфигурация (script_location = src/migrations)
+└── src/
+    └── migrations/
+        ├── __init__.py
+        ├── env.py                       ← async engine, читает settings.db.url
+        ├── script.py.mako               ← шаблон для новых миграций
+        └── versions/
+            └── 0001_create_users.py     ← CREATE SCHEMA users_schema + CREATE TABLE users
+```
+
+---
+
+## 📡 Тестирование User endpoints
+
+После успешного деплоя сервис поднят на `http://<VPS_IP>:8000`.  
+Если у вас настроен Traefik — через `https://your-domain.com`.
+
+### Через Swagger UI (браузер)
+
+Откройте в браузере:
+```
+http://<VPS_IP>:8000/docs
+```
+Или через домен (если настроен Traefik + TLS):
+```
+https://your-domain.com/docs
+```
+
+Там будут доступны два endpoint:
+- `POST /api/v1/users/create` — создать пользователя
+- `GET  /api/v1/users/all`    — получить всех пользователей
+
+---
+
+### Через curl на сервере
+
+```bash
+# ─── Создать пользователя ───────────────────────────────────────
+curl -s -X POST http://localhost:8000/api/v1/users/create \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Ivan", "surname": "Petrov"}' | python3 -m json.tool
+
+# Ожидаемый ответ:
+# {
+#   "message": "Пользователь успешно создан",
+#   "name": "Ivan",
+#   "surname": "Petrov"
+# }
+
+# ─── Получить всех пользователей ────────────────────────────────
+curl -s http://localhost:8000/api/v1/users/all | python3 -m json.tool
+
+# Ожидаемый ответ:
+# [
+#   {
+#     "name": "Ivan",
+#     "surname": "Petrov",
+#     "id": 1,
+#     "uid": "550e8400-e29b-41d4-a716-446655440000",
+#     "created_at": "2026-04-14T10:30:00+00:00"
+#   }
+# ]
+```
+
+---
+
+### Через curl с вашего компьютера
+
+```powershell
+# ─── Создать пользователя ───────────────────────────────────────
+$body = '{"name": "Ivan", "surname": "Petrov"}'
+Invoke-RestMethod -Method POST `
+  -Uri "http://<VPS_IP>:8000/api/v1/users/create" `
+  -ContentType "application/json" `
+  -Body $body
+
+# ─── Получить всех пользователей ────────────────────────────────
+Invoke-RestMethod -Method GET `
+  -Uri "http://<VPS_IP>:8000/api/v1/users/all"
+```
+
+---
+
+### Прямая проверка данных в БД
+
+```bash
+# Зайти в psql и посмотреть записи
+docker exec -it postgres psql -U postgres -d mydb \
+  -c "SELECT id, uid, name, surname, created_at FROM users_schema.users;"
+
+# Или в одну строку
+docker exec -it postgres psql -U postgres -d mydb -c "SELECT * FROM users_schema.users LIMIT 10;"
+```
+
+---
+
+### Если endpoint возвращает ошибку 500
+
+```bash
+# 1. Посмотреть логи сервиса
+docker logs user-service --tail=50
+
+# 2. Проверить подключение к БД из контейнера
+docker exec -it user-service python3 -c "
+import asyncio
+from core.database import db_client
+asyncio.run(db_client.dispose())
+print('DB connection OK')
+"
+
+# 3. Убедиться что .env.prod содержит правильный URL
+cat /opt/microservices/user-service/.env.prod | grep DB_URL
+# Должно быть: USER_CONFIG__DB__URL=postgresql+asyncpg://postgres:<password>@postgres:5432/mydb
+
+# 4. Убедиться что user-service и postgres в одной сети
+docker inspect user-service | python3 -m json.tool | grep -A 20 '"Networks"'
+# Должна быть сеть "internal"
+```
+
+---
+
+### Типичные ошибки при работе с endpoints
+
+| Ошибка | Причина | Решение |
+|--------|---------|---------|
+| `Connection refused` | Контейнер не запущен или порт не прокинут | `docker ps` → проверить порт `8000:8000` |
+| `could not connect to server` | Нет сети `internal` или контейнер postgres не запущен | Проверить `docker network inspect internal` |
+| `relation "users_schema.users" does not exist` | Миграции не применились | Запустить `docker compose run --rm migrate` вручную |
+| `column ... does not exist` | Новая миграция не применилась | Перезапустить CI/CD пайплайн |
+
