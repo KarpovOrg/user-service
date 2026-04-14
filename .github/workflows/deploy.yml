@@ -135,7 +135,7 @@ jobs:
             docker compose -f docker-compose.prod.yml run --rm migrate
 
             # Перезапускаем контейнер (без простоя других сервисов)
-            docker compose -f docker-compose.prod.yml up -d --no-deps user-service
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps user-service
 
             # Ждём старта контейнера
             sleep 5
