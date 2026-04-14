@@ -134,8 +134,12 @@ jobs:
             # Запускаем миграции (однократно, контейнер удаляется после выхода)
             docker compose -f docker-compose.prod.yml run --rm migrate
 
-            # Перезапускаем контейнер (без простоя других сервисов)
-            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps user-service
+            # Останавливаем и удаляем старый контейнер (если запущен вручную — compose его не видит)
+            docker stop user-service || true
+            docker rm user-service || true
+
+            # Запускаем новый контейнер с новым образом
+            docker compose -f docker-compose.prod.yml up -d --no-deps user-service
 
             # Ждём старта контейнера
             sleep 5
