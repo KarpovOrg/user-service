@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
 
+# Только один деплой одновременно — следующий отменяет предыдущий
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   # Имя образа: ghcr.io/ВАШ_ORГ/user-service
@@ -120,12 +125,9 @@ jobs:
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
               -u "${{ secrets.GHCR_USER }}" --password-stdin
 
-            # Экспортируем переменные в shell (как при ручном запуске)
-            # docker compose читает env vars приоритетнее .env файла
             export IMAGE_NAME="${{ env.IMAGE_NAME }}"
             export IMAGE_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
 
-            # Также пишем в .env для ручных перезапусков
             echo "IMAGE_NAME=${IMAGE_NAME}" > .env
             echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
             cat .env
@@ -142,27 +144,43 @@ jobs:
               docker compose -f docker-compose.prod.yml run --rm migrate python -m alembic stamp head || true
             fi
 
-            docker compose -f docker-compose.prod.yml up -d --no-deps user-service 2>&1
-            UP_EXIT=$?
-            echo "=== docker compose up exit code: $UP_EXIT ==="
-            echo "=== docker ps -a (все контейнеры) ==="
-            docker ps -a
-            echo "=== конец ==="
+            echo "=== Запускаем контейнер через docker run ==="
+            docker run -d \
+              --name user-service \
+              --restart unless-stopped \
+              --env-file .env.prod \
+              -p 8000:8000 \
+              --network internal \
+              --network traefik-net \
+              --label traefik.enable=true \
+              --label traefik.docker.network=traefik-net \
+              --label "traefik.http.routers.user-service.rule=PathPrefix(\`/api/v1\`)" \
+              --label traefik.http.routers.user-service.entrypoints=websecure \
+              --label traefik.http.routers.user-service.tls.certresolver=letsencrypt \
+              --label traefik.http.services.user-service.loadbalancer.server.port=8000 \
+              --health-cmd "curl -f http://localhost:8000/api/v1/health/ || exit 1" \
+              --health-interval 30s \
+              --health-timeout 10s \
+              --health-retries 3 \
+              --health-start-period 15s \
+              ${IMAGE_NAME}:${IMAGE_TAG}
 
-            if [ $UP_EXIT -ne 0 ]; then
-              echo "❌ docker compose up -d завершился с ошибкой $UP_EXIT"
-              echo "=== docker compose config ==="
-              docker compose -f docker-compose.prod.yml config
+            RUN_EXIT=$?
+            echo "=== docker run exit code: $RUN_EXIT ==="
+
+            if [ $RUN_EXIT -ne 0 ]; then
+              echo "❌ docker run завершился с ошибкой $RUN_EXIT"
               exit 1
             fi
 
             sleep 5
+            docker ps
 
-            if ! docker ps | grep -q user-service; then
+            if ! docker ps --format "{{.Names}}" | grep -qx "user-service"; then
               echo "❌ Контейнер user-service не запустился!"
               docker logs user-service --tail=50 2>&1 || true
               exit 1
             fi
 
-            echo "✅ Деплой завершён"
+            echo "✅ Деплой завершён: $(docker ps --format '{{.Image}}' --filter name=user-service)"
           ENDSSH
