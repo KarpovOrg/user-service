@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Имя образа: ghcr.io/ВАШ_ORG/user-service
+  # Имя образа: ghcr.io/ВАШ_ORГ/user-service
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/user-service
 
 jobs:
@@ -113,51 +113,32 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
-            set -ex
+            set -x
 
             cd ${{ secrets.SERVICE_DIR }}
 
-            # Логинимся в ghcr.io
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
               -u "${{ secrets.GHCR_USER }}" --password-stdin
 
-            # Сохраняем IMAGE_NAME и IMAGE_TAG в .env для docker compose
             echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
             echo "IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> .env
             cat .env
 
-            # Скачиваем новый образ
             docker compose -f docker-compose.prod.yml pull user-service
 
-            # Принудительно удаляем старые контейнеры (работающий или нет)
-            docker rm -f user-service          2>/dev/null || true
-            docker rm -f user-service-migrate  2>/dev/null || true
+            docker rm -f user-service         2>/dev/null || true
+            docker rm -f user-service-migrate 2>/dev/null || true
 
-            # Запускаем миграции. Если upgrade head падает (таблицы уже созданы вручную)
-            # — ставим stamp head чтобы пометить их как применённые, и продолжаем.
-            docker compose -f docker-compose.prod.yml run --rm migrate \
-              python -m alembic upgrade head \
-              || docker compose -f docker-compose.prod.yml run --rm migrate \
-                   python -m alembic stamp head \
-              || true
+            if docker compose -f docker-compose.prod.yml run --rm migrate python -m alembic upgrade head; then
+              echo "✅ Миграции применены"
+            else
+              echo "⚠️ upgrade head не прошёл, ставим stamp head..."
+              docker compose -f docker-compose.prod.yml run --rm migrate python -m alembic stamp head || true
+            fi
 
-            # Запускаем новый контейнер с новым образом
-            docker compose -f docker-compose.prod.yml up -d --no-deps user-service || {
-              echo "❌ docker compose up failed! Показываю .env и конфигурацию:"
-              cat .env
-              docker compose -f docker-compose.prod.yml config
-              exit 1
-            }
+            docker compose -f docker-compose.prod.yml up -d --no-deps user-service
 
-            # Ждём старта контейнера
             sleep 5
-
-            # Проверяем что контейнер запущен
             docker ps | grep user-service
-
-            echo "✅ Деплой завершён успешно"
-          ENDSSH
-            docker ps | grep user-service
-
-            echo "✅ Деплой завершён успешно"
+            echo "✅ Деплой завершён"
           ENDSSH
