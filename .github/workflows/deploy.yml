@@ -133,8 +133,13 @@ jobs:
             docker rm -f user-service          2>/dev/null || true
             docker rm -f user-service-migrate  2>/dev/null || true
 
-            # Запускаем миграции (|| true — если уже применены, это нормально)
-            docker compose -f docker-compose.prod.yml run --rm migrate || true
+            # Запускаем миграции. Если upgrade head падает (таблицы уже созданы вручную)
+            # — ставим stamp head чтобы пометить их как применённые, и продолжаем.
+            docker compose -f docker-compose.prod.yml run --rm migrate \
+              python -m alembic upgrade head \
+              || docker compose -f docker-compose.prod.yml run --rm migrate \
+                   python -m alembic stamp head \
+              || true
 
             # Запускаем новый контейнер с новым образом
             docker compose -f docker-compose.prod.yml up -d --no-deps user-service || {

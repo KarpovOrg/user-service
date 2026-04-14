@@ -21,25 +21,29 @@ SCHEMA = "users_schema"
 def upgrade() -> None:
     op.execute(sa.schema.CreateSchema(SCHEMA, if_not_exists=True))
 
-    op.create_table(
-        "users",
-        sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("uid", sa.UUID(), nullable=False),
-        sa.Column("name", sa.String(length=120), nullable=False),
-        sa.Column("surname", sa.String(length=120), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.PrimaryKeyConstraint("id", name="pk_users"),
-        sa.UniqueConstraint("uid", name="uq_users_uid"),
-        schema=SCHEMA,
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    op.create_index("ix_users_id", "users", ["id"], unique=False, schema=SCHEMA)
-    op.create_index("ix_users_uid", "users", ["uid"], unique=False, schema=SCHEMA)
+    if not inspector.has_table("users", schema=SCHEMA):
+        op.create_table(
+            "users",
+            sa.Column("id", sa.Integer(), nullable=False),
+            sa.Column("uid", sa.UUID(), nullable=False),
+            sa.Column("name", sa.String(length=120), nullable=False),
+            sa.Column("surname", sa.String(length=120), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("now()"),
+                nullable=False,
+            ),
+            sa.PrimaryKeyConstraint("id", name="pk_users"),
+            sa.UniqueConstraint("uid", name="uq_users_uid"),
+            schema=SCHEMA,
+        )
+
+        op.create_index("ix_users_id", "users", ["id"], unique=False, schema=SCHEMA)
+        op.create_index("ix_users_uid", "users", ["uid"], unique=False, schema=SCHEMA)
 
 
 def downgrade() -> None:
