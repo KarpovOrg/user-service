@@ -124,22 +124,25 @@ jobs:
             # Сохраняем IMAGE_NAME и IMAGE_TAG в .env для docker compose
             echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
             echo "IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> .env
+            cat .env
 
             # Скачиваем новый образ
             docker compose -f docker-compose.prod.yml pull user-service
 
-            # Останавливаем и удаляем старый контейнер ДО миграций
-            docker stop user-service 2>/dev/null || true
-            docker rm   user-service 2>/dev/null || true
-
-            # Удаляем старый контейнер миграций если завис
-            docker rm user-service-migrate 2>/dev/null || true
+            # Принудительно удаляем старые контейнеры (работающий или нет)
+            docker rm -f user-service          2>/dev/null || true
+            docker rm -f user-service-migrate  2>/dev/null || true
 
             # Запускаем миграции (|| true — если уже применены, это нормально)
             docker compose -f docker-compose.prod.yml run --rm migrate || true
 
             # Запускаем новый контейнер с новым образом
-            docker compose -f docker-compose.prod.yml up -d --no-deps user-service
+            docker compose -f docker-compose.prod.yml up -d --no-deps user-service || {
+              echo "❌ docker compose up failed! Показываю .env и конфигурацию:"
+              cat .env
+              docker compose -f docker-compose.prod.yml config
+              exit 1
+            }
 
             # Ждём старта контейнера
             sleep 5
