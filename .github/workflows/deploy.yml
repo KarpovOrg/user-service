@@ -121,27 +121,27 @@ jobs:
             # Логинимся в ghcr.io
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
               -u "${{ secrets.GHCR_USER }}" --password-stdin
-            
+
+            # ─── Сохраняем IMAGE_NAME и IMAGE_TAG в .env для docker compose ───
+            # docker compose автоматически читает .env из рабочей папки.
+            # Это позволяет перезапускать контейнеры вручную без указания переменных.
+            echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
+            echo "IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> .env
+
             # Скачиваем новый образ
-            IMAGE_NAME=${{ env.IMAGE_NAME }} \
-            IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7) \
-              docker compose -f docker-compose.prod.yml pull user-service
+            docker compose -f docker-compose.prod.yml pull user-service
 
             # Запускаем миграции (однократно, контейнер удаляется после выхода)
-            IMAGE_NAME=${{ env.IMAGE_NAME }} \
-            IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7) \
-              docker compose -f docker-compose.prod.yml run --rm migrate
-            
+            docker compose -f docker-compose.prod.yml run --rm migrate
+
             # Перезапускаем контейнер (без простоя других сервисов)
-            IMAGE_NAME=${{ env.IMAGE_NAME }} \
-            IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7) \
-              docker compose -f docker-compose.prod.yml up -d --no-deps user-service
-            
+            docker compose -f docker-compose.prod.yml up -d --no-deps user-service
+
             # Ждём старта контейнера
             sleep 5
-            
+
             # Проверяем что контейнер запущен
             docker ps | grep user-service
-            
+
             echo "✅ Деплой завершён успешно"
           ENDSSH
