@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 
 from pydantic import (
@@ -23,7 +24,7 @@ class UserCreateResponse(UserBase):
 
 class UserResponse(UserBase):
     id: int
-    uid: str
+    uid: uuid.UUID
     created_at: datetime
 
     model_config = ConfigDict(
