@@ -120,8 +120,14 @@ jobs:
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
               -u "${{ secrets.GHCR_USER }}" --password-stdin
 
-            echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
-            echo "IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> .env
+            # Экспортируем переменные в shell (как при ручном запуске)
+            # docker compose читает env vars приоритетнее .env файла
+            export IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            export IMAGE_TAG="sha-$(echo ${{ github.sha }} | cut -c1-7)"
+
+            # Также пишем в .env для ручных перезапусков
+            echo "IMAGE_NAME=${IMAGE_NAME}" > .env
+            echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
             cat .env
 
             docker compose -f docker-compose.prod.yml pull user-service
