@@ -19,31 +19,27 @@ SCHEMA = "users_schema"
 
 
 def upgrade() -> None:
-    op.execute(sa.schema.CreateSchema(SCHEMA, if_not_exists=True))
+    # Используем чистый SQL с IF NOT EXISTS — полностью идемпотентно
+    op.execute(sa.text("CREATE SCHEMA IF NOT EXISTS users_schema"))
 
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-
-    if not inspector.has_table("users", schema=SCHEMA):
-        op.create_table(
-            "users",
-            sa.Column("id", sa.Integer(), nullable=False),
-            sa.Column("uid", sa.UUID(), nullable=False),
-            sa.Column("name", sa.String(length=120), nullable=False),
-            sa.Column("surname", sa.String(length=120), nullable=False),
-            sa.Column(
-                "created_at",
-                sa.DateTime(timezone=True),
-                server_default=sa.text("now()"),
-                nullable=False,
-            ),
-            sa.PrimaryKeyConstraint("id", name="pk_users"),
-            sa.UniqueConstraint("uid", name="uq_users_uid"),
-            schema=SCHEMA,
+    op.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS users_schema.users (
+            id          SERIAL       NOT NULL,
+            uid         UUID         NOT NULL,
+            name        VARCHAR(120) NOT NULL,
+            surname     VARCHAR(120) NOT NULL,
+            created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+            CONSTRAINT pk_users    PRIMARY KEY (id),
+            CONSTRAINT uq_users_uid UNIQUE (uid)
         )
+    """))
 
-        op.create_index("ix_users_id", "users", ["id"], unique=False, schema=SCHEMA)
-        op.create_index("ix_users_uid", "users", ["uid"], unique=False, schema=SCHEMA)
+    op.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_users_id  ON users_schema.users (id)"
+    ))
+    op.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_users_uid ON users_schema.users (uid)"
+    ))
 
 
 def downgrade() -> None:

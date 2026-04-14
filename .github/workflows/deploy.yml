@@ -137,8 +137,18 @@ jobs:
             fi
 
             docker compose -f docker-compose.prod.yml up -d --no-deps user-service
+            if [ $? -ne 0 ]; then
+              echo "❌ docker compose up -d завершился с ошибкой"
+              exit 1
+            fi
 
             sleep 5
-            docker ps | grep user-service
+
+            if ! docker ps | grep -q user-service; then
+              echo "❌ Контейнер user-service не запустился!"
+              docker logs user-service --tail=30 2>&1 || true
+              exit 1
+            fi
+
             echo "✅ Деплой завершён"
           ENDSSH
