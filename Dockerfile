@@ -7,8 +7,11 @@ WORKDIR /app
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir -e .
 
-# Копируем исходный код
+# Копируем исходный код (включает src/migrations/)
 COPY src/ ./src/
+
+# alembic.ini должен лежать в WORKDIR (/app), чтобы `python -m alembic` нашёл его
+COPY alembic.ini ./
 
 EXPOSE 8000
 

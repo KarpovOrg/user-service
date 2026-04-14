@@ -19,6 +19,7 @@ class AppConfig(BaseModel):
 class ApiV1Prefix(BaseModel):
     prefix: str = "/v1"
     health: str = "/health"
+    users: str = "/users"
 
 
 class ApiPrefix(BaseModel):
@@ -26,8 +27,8 @@ class ApiPrefix(BaseModel):
     v1: ApiV1Prefix = ApiV1Prefix()
 
 
-#class DatabaseConfig(BaseModel):
-#    url: str
+class DatabaseConfig(BaseModel):
+    url: str
 
 
 class Settings(BaseSettings):
@@ -39,7 +40,7 @@ class Settings(BaseSettings):
     )
     app: AppConfig
     api: ApiPrefix = ApiPrefix()
-    #db: DatabaseConfig
+    db: DatabaseConfig
 
 
 settings = Settings()

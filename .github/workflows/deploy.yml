@@ -31,6 +31,7 @@ jobs:
         env:
           USER_CONFIG__APP__APP_NAME: "user-service-test"
           USER_CONFIG__APP__DEBUG: "true"
+          USER_CONFIG__DB__URL: "sqlite+aiosqlite:///:memory:"
         run: pytest src/tests/ -v
 
   # ─── 2. СБОРКА И ПУБЛИКАЦИЯ ОБРАЗА ────────────────────────────────────────
@@ -125,6 +126,11 @@ jobs:
             IMAGE_NAME=${{ env.IMAGE_NAME }} \
             IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7) \
               docker compose -f docker-compose.prod.yml pull user-service
+
+            # Запускаем миграции (однократно, контейнер удаляется после выхода)
+            IMAGE_NAME=${{ env.IMAGE_NAME }} \
+            IMAGE_TAG=sha-$(echo ${{ github.sha }} | cut -c1-7) \
+              docker compose -f docker-compose.prod.yml run --rm migrate
             
             # Перезапускаем контейнер (без простоя других сервисов)
             IMAGE_NAME=${{ env.IMAGE_NAME }} \
