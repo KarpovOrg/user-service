@@ -136,9 +136,17 @@ jobs:
               docker compose -f docker-compose.prod.yml run --rm migrate python -m alembic stamp head || true
             fi
 
-            docker compose -f docker-compose.prod.yml up -d --no-deps user-service
-            if [ $? -ne 0 ]; then
-              echo "❌ docker compose up -d завершился с ошибкой"
+            docker compose -f docker-compose.prod.yml up -d --no-deps user-service 2>&1
+            UP_EXIT=$?
+            echo "=== docker compose up exit code: $UP_EXIT ==="
+            echo "=== docker ps -a (все контейнеры) ==="
+            docker ps -a
+            echo "=== конец ==="
+
+            if [ $UP_EXIT -ne 0 ]; then
+              echo "❌ docker compose up -d завершился с ошибкой $UP_EXIT"
+              echo "=== docker compose config ==="
+              docker compose -f docker-compose.prod.yml config
               exit 1
             fi
 
@@ -146,7 +154,7 @@ jobs:
 
             if ! docker ps | grep -q user-service; then
               echo "❌ Контейнер user-service не запустился!"
-              docker logs user-service --tail=30 2>&1 || true
+              docker logs user-service --tail=50 2>&1 || true
               exit 1
             fi
 
