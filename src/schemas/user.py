@@ -1,0 +1,29 @@
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+)
+
+
+class UserBase(BaseModel):
+    name: str
+    surname: str
+
+
+class UserCreateRequest(UserBase):
+    pass
+
+
+class UserCreateResponse(UserBase):
+    message: str = "User created successfully"
+    name: str
+    surname: str
+
+
+class UserResponse(UserBase):
+    id: int
+    uid: str
+    created_at: str
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
