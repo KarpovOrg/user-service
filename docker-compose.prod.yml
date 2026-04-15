@@ -5,7 +5,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.prod
-    # ports не нужны — Traefik ходит через traefik-net напрямую к контейнеру
+    ports:
+      - "8000:8000"
     networks:
       - traefik-net
       - internal
