@@ -25,8 +25,13 @@ def upgrade() -> None:
         "users",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("uid", sa.UUID(), nullable=False),
+        sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=False),
         sa.Column("surname", sa.String(length=120), nullable=False),
+        sa.Column("password_hash", sa.String(), nullable=False),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+        sa.Column("is_verified", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+        sa.Column("is_superuser", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -35,6 +40,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name="pk_users"),
         sa.UniqueConstraint("uid", name="uq_users_uid"),
+        sa.UniqueConstraint("email", name="uq_users_email"),
         schema=SCHEMA,
     )
 
