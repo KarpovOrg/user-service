@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 
 # Устанавливаем зависимости
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir --progress-bar off -e .
 
 # Копируем исходный код (включает src/migrations/)
 COPY src/ ./src/
