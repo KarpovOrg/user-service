@@ -13,10 +13,6 @@ class TestApiV1Prefix:
         v1 = ApiV1Prefix()
         assert v1.prefix == "/v1"
 
-    def test_default_health(self):
-        v1 = ApiV1Prefix()
-        assert v1.health == "/health"
-
 
 class TestApiPrefix:
     def test_default_prefix(self):
