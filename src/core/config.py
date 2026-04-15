@@ -17,7 +17,7 @@ class AppConfig(BaseModel):
 
 
 class ApiV1Prefix(BaseModel):
-    prefix: str = "/v1"
+    prefix: str = "/v1/user-service"
     health: str = "/health"
     users: str = "/users"
 

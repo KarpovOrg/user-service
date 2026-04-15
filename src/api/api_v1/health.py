@@ -12,6 +12,6 @@ router = APIRouter(
 @router.get("/")
 async def health_check():
     return {
-        "service": "auth-service",
+        "service": "user-service",
         "status": "ok"
     }
