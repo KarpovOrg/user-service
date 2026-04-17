@@ -1,10 +1,14 @@
-from sqlalchemy import String, Boolean
+from sqlalchemy import (
+    String,
+    Boolean,
+)
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
 )
 
 from .base import Base
+
 from .mixins import (
     IdMixin,
     UidMixin,
@@ -21,13 +25,13 @@ class User(Base, IdMixin, UidMixin, CreatedAtMixin):
         unique=True,
         nullable=False,
     )
-    name: Mapped[str] = mapped_column(
+    name: Mapped[str | None] = mapped_column(
         String(120),
-        nullable=False,
+        nullable=True,
     )
-    surname: Mapped[str] = mapped_column(
+    surname: Mapped[str | None] = mapped_column(
         String(120),
-        nullable=False,
+        nullable=True,
     )
     password_hash: Mapped[str] = mapped_column(
         String,
