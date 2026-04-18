@@ -11,11 +11,9 @@ services:
       - traefik-net
       - internal
     labels:
-      # Включаем Traefik
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-net"
-      # Роутинг: все запросы /api/v1/users → этот контейнер
-      - "traefik.http.routers.user-service.rule=Host(`karpov1.duckdns.org`) && PathPrefix(`/api/v1`)"
+      - "traefik.http.routers.user-service.rule=Host(`karpov1.duckdns.org`) && PathPrefix(`/api/v1/users`)"
       - "traefik.http.routers.user-service.entrypoints=websecure"
       - "traefik.http.routers.user-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.user-service.loadbalancer.server.port=8000"
