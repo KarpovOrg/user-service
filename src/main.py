@@ -2,6 +2,8 @@ import uvicorn
 
 from fastapi import FastAPI
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from api import api_router
 
 from core.config import settings
@@ -18,6 +20,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
     app.include_router(api_router, prefix=settings.api.prefix)
+
+    Instrumentator().instrument(app).expose(app)
+
     return app
 
 
